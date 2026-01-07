@@ -1,0 +1,235 @@
+@startuml
+title MicroTestIQ - Batch Unit Test Generator (LLD with Detailed Notes)
+
+actor User
+participant "Streamlit UI\n(run_app)" as UI
+participant "ZIP Handler\nextract_zip()" as ZIP
+participant "Java Scanner\nscan_java_files()" as SCAN
+participant "Test Matcher\nfind_missing_tests()" as MATCH
+participant "Status Table\n(Session State)" as TABLE
+participant "Class Classifier\nclassify()" as CLASSIFY
+participant "LLM Engine\n(generate_test)" as LLM
+participant "File System\n(src/test/java)" as FS
+participant "Test Aggregator\ncreate_test_bundle()" as AGG
+
+== ZIP Upload & Extraction ==
+
+User -> UI : Upload microservices.zip
+
+note right of User
+User uploads a ZIP containing
+multiple Java microservices.
+The ZIP may include:
+- Multiple modules
+- src/main/java
+- src/test/java
+end note
+
+UI -> ZIP : extract_zip(zip)
+
+note right of ZIP
+Extracts ZIP into a temporary
+working directory to avoid
+modifying original files.
+Returns project root path.
+end note
+
+ZIP --> UI : project_root_path
+
+== Java Source Scanning ==
+
+UI -> SCAN : scan_java_files(project_root)
+
+note right of SCAN
+Recursively scans the project
+directory and separates:
+- Application Java files
+  (src/main/java)
+- Existing test files
+  (src/test/java)
+end note
+
+SCAN --> UI : main_java_files,\ntest_java_files
+
+== Missing Test Detection ==
+
+UI -> MATCH : find_missing_tests(main, test)
+
+note right of MATCH
+For each application class:
+- Determines expected test name
+  (ClassNameTest.java)
+- Verifies same package path
+  under src/test/java
+- Identifies missing tests
+end note
+
+MATCH --> UI : missing_test_classes[]
+
+note right of UI
+Each missing entry contains:
+- Class name
+- Source file path
+- Package path
+Used later for generation.
+end note
+
+== Initial UI Table Rendering ==
+
+UI -> TABLE : Initialize status table
+
+note right of TABLE
+Creates a UI table with:
+- File Name
+- File Path
+- Status = ⏳ Pending
+- Remarks = empty
+No test generation yet.
+end note
+
+UI -> User : Display table (Pending state)
+
+== Batch Generation Trigger ==
+
+User -> UI : Click "Generate Test Cases (Auto)"
+
+note right of UI
+Batch generation starts.
+Classes are processed one by one
+to ensure:
+- Stability
+- Clear progress tracking
+- Failure isolation
+end note
+
+== Batch Test Generation Loop ==
+
+loop For each missing class
+
+    UI -> TABLE : Update status = ⚙ In Progress
+
+    note right of TABLE
+    Marks the selected class
+    as currently being processed.
+    This gives real-time feedback
+    to the user.
+    end note
+
+    UI -> FS : Read full Java source file
+
+    note right of FS
+    Reads the complete Java class
+    including:
+    - All methods
+    - Dependencies
+    - Annotations
+    Full context is required
+    for quality test generation.
+    end note
+
+    FS --> UI : Java source code
+
+    UI -> CLASSIFY : classify(java_source)
+
+    note right of CLASSIFY
+    Determines class type based
+    on annotations:
+    - @RestController → CONTROLLER
+    - @Service → SERVICE
+    - @Repository → REPOSITORY
+    - Else → UTILITY
+    end note
+
+    CLASSIFY --> UI : Class Type
+
+    UI -> LLM : generate_test(\njava_source,\nclass_name,\nclass_type)
+
+    note right of LLM
+    LLM generates JUnit 5 tests by:
+    - Analyzing full class context
+    - Detecting dependencies
+    - Applying Mockito where needed
+    - Writing positive, negative,
+      and edge case tests
+    end note
+
+    alt Test generation success
+        LLM --> UI : JUnit test code
+
+        UI -> FS : Save ClassNameTest.java\n(preserve package path)
+
+        note right of FS
+        Test file is written to:
+        src/test/java/<same package>
+        Structure matches Maven
+        and Gradle conventions.
+        end note
+
+        UI -> TABLE : Status = ✅ Done\nRemarks = Generated successfully
+
+        note right of TABLE
+        Marks class as completed.
+        Test is now ready to run
+        or commit to repository.
+        end note
+
+    else Test generation failure
+        LLM --> UI : Error / Exception
+
+        UI -> TABLE : Status = ❌ Failed\nRemarks = Error details
+
+        note right of TABLE
+        Failure is recorded but
+        does NOT stop the batch.
+        Other classes continue
+        processing.
+        end note
+    end alt
+
+end loop
+
+== Batch Completion ==
+
+UI -> TABLE : Mark batch execution completed
+
+note right of UI
+Batch completion is determined
+after processing all classes,
+regardless of success or failure.
+This enables partial results.
+end note
+
+== Test Aggregation & Download ==
+
+User -> UI : Click "Download Unit Tests"
+
+note right of User
+User can download tests even if:
+- Some tests failed
+- Partial generation occurred
+This matches enterprise tools.
+end note
+
+UI -> AGG : create_test_bundle(project_root,\ngenerated_tests)
+
+note right of AGG
+Collects:
+- Existing test cases
+- Newly generated test cases
+Preserves directory structure
+and packages everything into
+a single ZIP.
+end note
+
+AGG --> UI : all-unit-tests.zip
+
+UI -> User : Download ZIP
+
+note right of User
+ZIP is ready to:
+- Commit to Git
+- Run via Maven/Gradle
+- Use in CI/CD pipelines
+end note
+
+@enduml
