@@ -24,3 +24,33 @@ def create_test_bundle(project_root, generated_tests):
                     zipf.write(full, full.replace(temp_dir + "/", ""))
 
     return zip_path
+
+
+
+
+
+
+
+
+
+
+import zipfile
+import os
+from io import BytesIO
+
+
+def create_test_bundle(root, generated_tests):
+    """
+    Returns ZIP as BytesIO instead of file path
+    """
+    zip_buffer = BytesIO()
+
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
+        for test in generated_tests:
+            path = test["path"]
+            if os.path.exists(path):
+                arcname = os.path.relpath(path, root)
+                zipf.write(path, arcname)
+
+    zip_buffer.seek(0)
+    return zip_buffer
