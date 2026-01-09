@@ -83,11 +83,18 @@ def run_app():
 
                 class_type = classify(java_code)
 
-                test_code = generate_test(
-                    java_code=java_code,
-                    class_name=cls,
-                    class_type=class_type
-                )
+                
+
+                raw_test_code = generate_test(
+    java_code=java_code,
+    class_name=cls,
+    class_type=class_type
+)
+
+test_code = sanitize_test_code(
+    raw_code=raw_test_code,
+    class_name=cls
+)
 
                 test_path = build_test_path(
                     root,
